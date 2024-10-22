@@ -15,105 +15,103 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 public class Map1 {
 
-  // Mapper class to extract year and monthly electricity consumption
-  public static class ConsumptionMapper
-       extends Mapper<Object, Text, IntWritable, DoubleWritable> {
+    // Mapper class to extract year and monthly electricity consumption
+    public static class ConsumptionMapper extends Mapper<Object, Text, IntWritable, DoubleWritable> {
+        private IntWritable yearOutput = new IntWritable();
+        private DoubleWritable consumptionOutput = new DoubleWritable();
 
-    private IntWritable year = new IntWritable();
-    private DoubleWritable consumption = new DoubleWritable();
+        @Override
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            String line = value.toString();
+            StringTokenizer tokenizer = new StringTokenizer(line, "\t"); // Sử dụng tab làm dấu phân cách
 
-    @Override
-    public void map(Object key, Text value, Context context
-                    ) throws IOException, InterruptedException {
-      String line = value.toString();
-      StringTokenizer tokenizer = new StringTokenizer(line, "\t");  // Sử dụng tab làm dấu phân cách
+            // Kiểm tra nếu dòng có đúng 13 token (1 cho năm và 12 cho mức tiêu thụ hàng tháng)
+            if (tokenizer.countTokens() == 13) {
+                String yearStr = tokenizer.nextToken(); // Năm
+                try {
+                    int yearInt = Integer.parseInt(yearStr); // Chuyển đổi năm
+                    yearOutput.set(yearInt);
 
-      // Kiểm tra nếu dòng có đúng 13 token (1 cho năm và 12 cho mức tiêu thụ hàng tháng)
-      if (tokenizer.countTokens() == 13) {
-        String yearStr = tokenizer.nextToken();  // Năm
-        try {
-          int yearInt = Integer.parseInt(yearStr);  // Chuyển đổi năm
-          year.set(yearInt);
+                    // Tính tổng mức tiêu thụ điện cho cả năm
+                    double sum = 0;
+                    int count = 0;
 
-          // Tính tổng mức tiêu thụ điện cho cả năm
-          double sum = 0;
-          int count = 0;
+                    while (tokenizer.hasMoreTokens()) {
+                        String consumptionStr = tokenizer.nextToken();
 
-          while (tokenizer.hasMoreTokens()) {
-            String consumptionStr = tokenizer.nextToken();
+                        // Xử lý giá trị không hợp lệ "00" bằng cách thay thế bằng 0.0
+                        double consumptionDouble;
+                        if (consumptionStr.equals("00")) {
+                            consumptionDouble = 0.0;
+                        } else {
+                            consumptionDouble = Double.parseDouble(consumptionStr);
+                        }
 
-            // Xử lý giá trị không hợp lệ "00" bằng cách thay thế bằng 0.0
-            double consumptionDouble;
-            if (consumptionStr.equals("00")) {
-              consumptionDouble = 0.0;
+                        sum += consumptionDouble;
+                        count++;
+                    }
+
+                    // Chỉ viết ra kết quả nếu có đủ 12 tháng
+                    if (count == 12) {
+                        double average = sum / 12; // Tính mức tiêu thụ trung bình hàng năm
+                        consumptionOutput.set(average);
+                        context.write(yearOutput, consumptionOutput);
+                    }
+                } catch (NumberFormatException e) {
+                    // Xử lý lỗi định dạng (năm hoặc mức tiêu thụ không phải là số)
+                    System.err.println("Invalid record: " + line);
+                }
             } else {
-              consumptionDouble = Double.parseDouble(consumptionStr);
+                // Thông báo nếu dòng không đủ token
+                System.err.println("Invalid token count in record: " + line);
+            }
+        }
+    }
+
+    // Reducer class to calculate yearly average and filter those > 30
+    public static class AvgConsumptionReducer extends Reducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
+        private DoubleWritable result = new DoubleWritable();
+
+        @Override
+        public void reduce(IntWritable key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
+            int count = 0;
+            double sum = 0;
+
+            // Tính tổng mức tiêu thụ điện và số tháng
+            for (DoubleWritable val : values) {
+                sum += val.get();
+                count++;
             }
 
-            sum += consumptionDouble;
-            count++;
-          }
+            // Tính mức tiêu thụ trung bình hàng năm
+            double average = sum / count;
 
-          // Chỉ viết ra kết quả nếu có đủ 12 tháng
-          if (count == 12) {
-            double average = sum / 12;  // Tính mức tiêu thụ trung bình hàng năm
-            context.write(year, new DoubleWritable(average));
-          }
-        } catch (NumberFormatException e) {
-          // Xử lý lỗi định dạng (năm hoặc mức tiêu thụ không phải là số)
-          System.err.println("Invalid record: " + line);
+            // Chỉ xuất ra các năm có mức tiêu thụ trung bình > 30
+            if (average > 30) {
+                result.set(average);
+                context.write(key, result);  // Xuất ra (năm, mức tiêu thụ trung bình)
+            }
         }
-      }
     }
-  }
 
-  // Reducer class to calculate yearly average and filter those > 30
-  public static class AvgConsumptionReducer
-       extends Reducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
-    private DoubleWritable result = new DoubleWritable();
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        GenericOptionsParser optionParser = new GenericOptionsParser(conf, args);
+        String[] remainingArgs = optionParser.getRemainingArgs();
+        if (remainingArgs.length != 2) {
+            System.err.println("Usage: Map1 <in> <out>");
+            System.exit(2);
+        }
+        Job job = Job.getInstance(conf, "electricity consumption");
+        job.setJarByClass(Map1.class);
+        job.setMapperClass(ConsumptionMapper.class);
+        job.setReducerClass(AvgConsumptionReducer.class);
+        job.setOutputKeyClass(IntWritable.class);
+        job.setOutputValueClass(DoubleWritable.class);
 
-    @Override
-    public void reduce(IntWritable key, Iterable<DoubleWritable> values,
-                       Context context
-                       ) throws IOException, InterruptedException {
-      int count = 0;
-      double sum = 0;
+        FileInputFormat.addInputPath(job, new Path(remainingArgs[0]));
+        FileOutputFormat.setOutputPath(job, new Path(remainingArgs[1]));
 
-      // Tính tổng mức tiêu thụ điện và số tháng
-      for (DoubleWritable val : values) {
-        sum += val.get();
-        count++;
-      }
-
-      // Tính mức tiêu thụ trung bình hàng năm
-      double average = sum / count;
-
-      // Chỉ xuất ra các năm có mức tiêu thụ trung bình > 30
-      if (average > 30) {
-        result.set(average);
-        context.write(key, result);  // Xuất ra (năm, mức tiêu thụ trung bình)
-      }
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
-  }
-
-  public static void main(String[] args) throws Exception {
-    Configuration conf = new Configuration();
-    GenericOptionsParser optionParser = new GenericOptionsParser(conf, args);
-    String[] remainingArgs = optionParser.getRemainingArgs();
-    if (remainingArgs.length != 2) {
-      System.err.println("Usage: Map1 <in> <out>");
-      System.exit(2);
-    }
-    Job job = Job.getInstance(conf, "electricity consumption");
-    job.setJarByClass(Map1.class);
-    job.setMapperClass(ConsumptionMapper.class);
-    job.setReducerClass(AvgConsumptionReducer.class);
-    job.setOutputKeyClass(IntWritable.class);
-    job.setOutputValueClass(DoubleWritable.class);
-
-    FileInputFormat.addInputPath(job, new Path(remainingArgs[0]));
-    FileOutputFormat.setOutputPath(job, new Path(remainingArgs[1]));
-
-    System.exit(job.waitForCompletion(true) ? 0 : 1);
-  }
 }
