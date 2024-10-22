@@ -13,99 +13,98 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
-public class Map1 {
+public class ElectricityConsumption {
 
-  // Mapper class to extract year and monthly electricity consumption
-  public static class ConsumptionMapper
-       extends Mapper<Object, Text, IntWritable, DoubleWritable> {
+    // Mapper class
+    public static class ConsumptionMapper extends Mapper<Object, Text, IntWritable, DoubleWritable> {
 
-    private IntWritable year = new IntWritable();
-    private DoubleWritable averageConsumption = new DoubleWritable();
+        private IntWritable year = new IntWritable();
+        private DoubleWritable averageConsumption = new DoubleWritable();
 
-    @Override
-    public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-      String line = value.toString();
-      StringTokenizer tokenizer = new StringTokenizer(line, "\t");
+        @Override
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            String line = value.toString();
+            StringTokenizer tokenizer = new StringTokenizer(line, "\t");
 
-      // Check if there are exactly 13 tokens (1 year + 12 months)
-      if (tokenizer.countTokens() == 13) {
-        try {
-          // Extract year and convert to integer
-          year.set(Integer.parseInt(tokenizer.nextToken()));
+            // Check if there are exactly 13 tokens (1 year + 12 months)
+            if (tokenizer.countTokens() == 13) {
+                try {
+                    // Extract year and convert to integer
+                    year.set(Integer.parseInt(tokenizer.nextToken()));
 
-          double totalConsumption = 0;
-          int count = 0;
+                    double totalConsumption = 0;
+                    int count = 0;
 
-          // Calculate total consumption for the year
-          while (tokenizer.hasMoreTokens()) {
-            String monthConsumptionStr = tokenizer.nextToken().trim();
-            double monthConsumption = monthConsumptionStr.equals("00") ? 0.0 : Double.parseDouble(monthConsumptionStr);
-            totalConsumption += monthConsumption;
-            count++;
-          }
+                    // Calculate total consumption for the year
+                    while (tokenizer.hasMoreTokens()) {
+                        String monthConsumptionStr = tokenizer.nextToken().trim();
+                        double monthConsumption = monthConsumptionStr.equals("00") ? 0.0 : Double.parseDouble(monthConsumptionStr);
+                        totalConsumption += monthConsumption;
+                        count++;
+                    }
 
-          // Calculate average if there are 12 months
-          if (count == 12) {
-            double average = totalConsumption / 12;
-            averageConsumption.set(average);
-            context.write(year, averageConsumption);
-          }
-        } catch (NumberFormatException e) {
-          System.err.println("Invalid number format in line: " + line);
+                    // Calculate average if there are 12 months
+                    if (count == 12) {
+                        double average = totalConsumption / 12;
+                        averageConsumption.set(average);
+                        context.write(year, averageConsumption);
+                    }
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid number format in line: " + line);
+                }
+            } else {
+                System.err.println("Invalid line, expected 13 tokens but got: " + tokenizer.countTokens());
+            }
         }
-      } else {
-        System.err.println("Invalid line, expected 13 tokens but got: " + tokenizer.countTokens());
-      }
-    }
-  }
-
-  // Reducer class to calculate yearly average and filter those > 30
-  public static class AvgConsumptionReducer
-       extends Reducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
-    private DoubleWritable result = new DoubleWritable();
-
-    @Override
-    public void reduce(IntWritable key, Iterable<DoubleWritable> values, Context context)
-           throws IOException, InterruptedException {
-      double sum = 0;
-      int count = 0;
-
-      // Sum all average consumptions from the mapper
-      for (DoubleWritable val : values) {
-        sum += val.get();
-        count++;
-      }
-
-      // Calculate yearly average
-      double average = sum / count;
-
-      // Only output years with average consumption > 30
-      if (average > 30) {
-        result.set(average);
-        context.write(key, result);
-      }
-    }
-  }
-
-  public static void main(String[] args) throws Exception {
-    Configuration conf = new Configuration();
-    GenericOptionsParser optionParser = new GenericOptionsParser(conf, args);
-    String[] remainingArgs = optionParser.getRemainingArgs();
-    if (remainingArgs.length != 2) {
-      System.err.println("Usage: Map1 <in> <out>");
-      System.exit(2);
     }
 
-    Job job = Job.getInstance(conf, "electricity consumption");
-    job.setJarByClass(Map1.class);
-    job.setMapperClass(ConsumptionMapper.class);
-    job.setReducerClass(AvgConsumptionReducer.class);
-    job.setOutputKeyClass(IntWritable.class);
-    job.setOutputValueClass(DoubleWritable.class);
+    // Reducer class
+    public static class AvgConsumptionReducer extends Reducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
+        private DoubleWritable result = new DoubleWritable();
 
-    FileInputFormat.addInputPath(job, new Path(remainingArgs[0]));
-    FileOutputFormat.setOutputPath(job, new Path(remainingArgs[1]));
+        @Override
+        public void reduce(IntWritable key, Iterable<DoubleWritable> values, Context context)
+                throws IOException, InterruptedException {
+            double sum = 0;
+            int count = 0;
 
-    System.exit(job.waitForCompletion(true) ? 0 : 1);
-  }
+            // Sum all average consumptions from the mapper
+            for (DoubleWritable val : values) {
+                sum += val.get();
+                count++;
+            }
+
+            // Calculate yearly average
+            double average = sum / count;
+
+            // Only output years with average consumption > 30
+            if (average > 30) {
+                result.set(average);
+                context.write(key, result);
+            }
+        }
+    }
+
+    // Main class
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        GenericOptionsParser optionParser = new GenericOptionsParser(conf, args);
+        String[] remainingArgs = optionParser.getRemainingArgs();
+        if (remainingArgs.length != 2) {
+            System.err.println("Usage: ElectricityConsumption <in> <out>");
+            System.exit(2);
+        }
+
+        Job job = Job.getInstance(conf, "Electricity Consumption");
+        job.setJarByClass(ElectricityConsumption.class);
+        job.setMapperClass(ConsumptionMapper.class);
+        job.setReducerClass(AvgConsumptionReducer.class);
+        job.setOutputKeyClass(IntWritable.class);
+        job.setOutputValueClass(DoubleWritable.class);
+
+        FileInputFormat.addInputPath(job, new Path(remainingArgs[0]));
+        FileOutputFormat.setOutputPath(job, new Path(remainingArgs[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
 }
