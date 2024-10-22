@@ -17,7 +17,7 @@ public class Map1 {
 
   // Mapper class to extract year and monthly electricity consumption
   public static class ConsumptionMapper
-       extends Mapper<Object, Text, IntWritable, DoubleWritable>{
+       extends Mapper<Object, Text, IntWritable, DoubleWritable> {
 
     private IntWritable year = new IntWritable();
     private DoubleWritable consumption = new DoubleWritable();
@@ -26,22 +26,41 @@ public class Map1 {
     public void map(Object key, Text value, Context context
                     ) throws IOException, InterruptedException {
       String line = value.toString();
-      StringTokenizer tokenizer = new StringTokenizer(line, ",");
+      StringTokenizer tokenizer = new StringTokenizer(line, "\t");  // Sử dụng tab làm dấu phân cách
 
-      // Assume that first token is the year, and second token is the consumption value
-      if (tokenizer.hasMoreTokens()) {
-        String yearStr = tokenizer.nextToken();
-        String consumptionStr = tokenizer.nextToken();
+      // Kiểm tra nếu dòng có đúng 13 token (1 cho năm và 12 cho mức tiêu thụ hàng tháng)
+      if (tokenizer.countTokens() == 13) {
+        String yearStr = tokenizer.nextToken();  // Năm
         try {
-          int yearInt = Integer.parseInt(yearStr);
-          double consumptionDouble = Double.parseDouble(consumptionStr);
-
+          int yearInt = Integer.parseInt(yearStr);  // Chuyển đổi năm
           year.set(yearInt);
-          consumption.set(consumptionDouble);
 
-          context.write(year, consumption); // Output (year, consumption)
+          // Tính tổng mức tiêu thụ điện cho cả năm
+          double sum = 0;
+          int count = 0;
+
+          while (tokenizer.hasMoreTokens()) {
+            String consumptionStr = tokenizer.nextToken();
+
+            // Xử lý giá trị không hợp lệ "00" bằng cách thay thế bằng 0.0
+            double consumptionDouble;
+            if (consumptionStr.equals("00")) {
+              consumptionDouble = 0.0;
+            } else {
+              consumptionDouble = Double.parseDouble(consumptionStr);
+            }
+
+            sum += consumptionDouble;
+            count++;
+          }
+
+          // Chỉ viết ra kết quả nếu có đủ 12 tháng
+          if (count == 12) {
+            double average = sum / 12;  // Tính mức tiêu thụ trung bình hàng năm
+            context.write(year, new DoubleWritable(average));
+          }
         } catch (NumberFormatException e) {
-          // Handle any formatting issues
+          // Xử lý lỗi định dạng (năm hoặc mức tiêu thụ không phải là số)
           System.err.println("Invalid record: " + line);
         }
       }
@@ -60,19 +79,19 @@ public class Map1 {
       int count = 0;
       double sum = 0;
 
-      // Sum up all monthly consumption for the year and count the months
+      // Tính tổng mức tiêu thụ điện và số tháng
       for (DoubleWritable val : values) {
         sum += val.get();
         count++;
       }
 
-      // Calculate the average consumption for the year
+      // Tính mức tiêu thụ trung bình hàng năm
       double average = sum / count;
 
-      // Filter years with average consumption > 30
+      // Chỉ xuất ra các năm có mức tiêu thụ trung bình > 30
       if (average > 30) {
         result.set(average);
-        context.write(key, result); // Output (year, average consumption)
+        context.write(key, result);  // Xuất ra (năm, mức tiêu thụ trung bình)
       }
     }
   }
