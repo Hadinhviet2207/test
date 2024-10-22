@@ -9,38 +9,39 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-// Mapper class: Phát ra quốc gia và giá trị 1 cho mỗi giao dịch
-public class SalesMapper extends Mapper<Object, Text, Text, IntWritable> {
-    private final static IntWritable one = new IntWritable(1);
-    private Text country = new Text();
+public class SalesCount {
 
-    public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-        String[] fields = value.toString().split(",");
-        if (fields.length > 7) {  // Kiểm tra xem có đủ trường dữ liệu
-            country.set(fields[7]);  // Trích xuất quốc gia (trường thứ 7)
-            context.write(country, one);  // Phát ra (quốc gia, 1)
+    // Mapper class: Phát ra quốc gia và giá trị 1 cho mỗi giao dịch
+    public static class SalesMapper extends Mapper<Object, Text, Text, IntWritable> {
+        private final static IntWritable one = new IntWritable(1);
+        private Text country = new Text();
+
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            String[] fields = value.toString().split(",");
+            if (fields.length > 7) {  // Kiểm tra xem có đủ trường dữ liệu
+                country.set(fields[7]);  // Trích xuất quốc gia (trường thứ 7)
+                context.write(country, one);  // Phát ra (quốc gia, 1)
+            }
         }
     }
-}
 
-// Reducer class: Tổng hợp số lượng bán hàng cho mỗi quốc gia
-public class SalesReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
-    public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-        int sum = 0;
-        for (IntWritable val : values) {
-            sum += val.get();  // Tính tổng số lượng giao dịch
+    // Reducer class: Tổng hợp số lượng bán hàng cho mỗi quốc gia
+    public static class SalesReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();  // Tính tổng số lượng giao dịch
+            }
+            context.write(key, new IntWritable(sum));  // Phát ra (quốc gia, tổng giao dịch)
         }
-        context.write(key, new IntWritable(sum));  // Phát ra (quốc gia, tổng giao dịch)
     }
-}
 
-// Driver class: Cấu hình và chạy công việc MapReduce
-public class SalesDriver {
+    // Main method: Cấu hình và chạy công việc MapReduce
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "Sales Count by Country");
 
-        job.setJarByClass(SalesDriver.class);
+        job.setJarByClass(SalesCount.class);
         job.setMapperClass(SalesMapper.class);
         job.setCombinerClass(SalesReducer.class);  // Sử dụng combiner để tối ưu
         job.setReducerClass(SalesReducer.class);
