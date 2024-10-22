@@ -15,9 +15,8 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 public class ElectricityConsumption {
 
-    // Mapper class
+    // Mapper: đọc mỗi dòng dữ liệu từ tệp dữ liệu đầu vào
     public static class ConsumptionMapper extends Mapper<Object, Text, IntWritable, DoubleWritable> {
-
         private IntWritable year = new IntWritable();
         private DoubleWritable averageConsumption = new DoubleWritable();
 
@@ -26,16 +25,15 @@ public class ElectricityConsumption {
             String line = value.toString();
             StringTokenizer tokenizer = new StringTokenizer(line, "\t");
 
-            // Check if there are exactly 13 tokens (1 year + 12 months)
+            // Kiểm tra nếu có đúng 13 token (1 năm + 12 tháng)
             if (tokenizer.countTokens() == 13) {
                 try {
-                    // Extract year and convert to integer
-                    year.set(Integer.parseInt(tokenizer.nextToken()));
+                    year.set(Integer.parseInt(tokenizer.nextToken())); // Lấy năm
 
                     double totalConsumption = 0;
                     int count = 0;
 
-                    // Calculate total consumption for the year
+                    // Tính tổng mức tiêu thụ điện cho cả năm
                     while (tokenizer.hasMoreTokens()) {
                         String monthConsumptionStr = tokenizer.nextToken().trim();
                         double monthConsumption = monthConsumptionStr.equals("00") ? 0.0 : Double.parseDouble(monthConsumptionStr);
@@ -43,11 +41,11 @@ public class ElectricityConsumption {
                         count++;
                     }
 
-                    // Calculate average if there are 12 months
+                    // Chỉ ghi ra nếu có đủ 12 tháng
                     if (count == 12) {
-                        double average = totalConsumption / 12;
+                        double average = totalConsumption / 12; // Tính mức tiêu thụ trung bình
                         averageConsumption.set(average);
-                        context.write(year, averageConsumption);
+                        context.write(year, averageConsumption); // Xuất (năm, mức tiêu thụ trung bình)
                     }
                 } catch (NumberFormatException e) {
                     System.err.println("Invalid number format in line: " + line);
@@ -58,38 +56,38 @@ public class ElectricityConsumption {
         }
     }
 
-    // Reducer class
+    // Reducer: nhận các cặp key-value từ mapper
     public static class AvgConsumptionReducer extends Reducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
         private DoubleWritable result = new DoubleWritable();
 
         @Override
-        public void reduce(IntWritable key, Iterable<DoubleWritable> values, Context context)
-                throws IOException, InterruptedException {
+        public void reduce(IntWritable key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
             double sum = 0;
             int count = 0;
 
-            // Sum all average consumptions from the mapper
+            // Tính tổng mức tiêu thụ trung bình từ các mapper
             for (DoubleWritable val : values) {
                 sum += val.get();
                 count++;
             }
 
-            // Calculate yearly average
+            // Tính mức tiêu thụ trung bình hàng năm
             double average = sum / count;
 
-            // Only output years with average consumption > 30
+            // Chỉ xuất ra nếu mức tiêu thụ trung bình > 30
             if (average > 30) {
                 result.set(average);
-                context.write(key, result);
+                context.write(key, result); // Xuất (năm, mức tiêu thụ trung bình)
             }
         }
     }
 
-    // Main class
+    // Main: cấu hình và chạy công việc MapReduce
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
         GenericOptionsParser optionParser = new GenericOptionsParser(conf, args);
         String[] remainingArgs = optionParser.getRemainingArgs();
+
         if (remainingArgs.length != 2) {
             System.err.println("Usage: ElectricityConsumption <in> <out>");
             System.exit(2);
@@ -102,8 +100,8 @@ public class ElectricityConsumption {
         job.setOutputKeyClass(IntWritable.class);
         job.setOutputValueClass(DoubleWritable.class);
 
-        FileInputFormat.addInputPath(job, new Path(remainingArgs[0]));
-        FileOutputFormat.setOutputPath(job, new Path(remainingArgs[1]));
+        FileInputFormat.addInputPath(job, new Path(remainingArgs[0])); // Đường dẫn vào
+        FileOutputFormat.setOutputPath(job, new Path(remainingArgs[1])); // Đường dẫn ra
 
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
