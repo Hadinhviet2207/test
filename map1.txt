@@ -1,9 +1,6 @@
 import java.io.IOException;
-import java.util.StringTokenizer;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
@@ -11,100 +8,51 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.util.GenericOptionsParser;
 
-public class ElectricityConsumption {
+// Mapper class: Phát ra quốc gia và giá trị 1 cho mỗi giao dịch
+public class SalesMapper extends Mapper<Object, Text, Text, IntWritable> {
+    private final static IntWritable one = new IntWritable(1);
+    private Text country = new Text();
 
-    // Mapper: đọc mỗi dòng dữ liệu từ tệp dữ liệu đầu vào
-    public static class ConsumptionMapper extends Mapper<Object, Text, IntWritable, DoubleWritable> {
-        private IntWritable year = new IntWritable();
-        private DoubleWritable averageConsumption = new DoubleWritable();
-
-        @Override
-        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String line = value.toString();
-            StringTokenizer tokenizer = new StringTokenizer(line, "\t");
-
-            // Kiểm tra nếu có đúng 13 token (1 năm + 12 tháng)
-            if (tokenizer.countTokens() == 13) {
-                try {
-                    year.set(Integer.parseInt(tokenizer.nextToken())); // Lấy năm
-
-                    double totalConsumption = 0;
-                    int count = 0;
-
-                    // Tính tổng mức tiêu thụ điện cho cả năm
-                    while (tokenizer.hasMoreTokens()) {
-                        String monthConsumptionStr = tokenizer.nextToken().trim();
-                        if (!monthConsumptionStr.isEmpty()) { // Kiểm tra chuỗi không rỗng
-                            double monthConsumption = monthConsumptionStr.equals("00") ? 0.0 : Double.parseDouble(monthConsumptionStr);
-                            totalConsumption += monthConsumption;
-                            count++;
-                        }
-                    }
-
-                    // Chỉ ghi ra nếu có đủ 12 tháng
-                    if (count == 12) {
-                        double average = totalConsumption / 12; // Tính mức tiêu thụ trung bình
-                        averageConsumption.set(average);
-                        context.write(year, averageConsumption); // Xuất (năm, mức tiêu thụ trung bình)
-                    }
-                } catch (NumberFormatException e) {
-                    System.err.println("Invalid number format in line: " + line);
-                }
-            } else {
-                System.err.println("Invalid line, expected 13 tokens but got: " + tokenizer.countTokens());
-            }
+    public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+        String[] fields = value.toString().split(",");
+        if (fields.length > 7) {  // Kiểm tra xem có đủ trường dữ liệu
+            country.set(fields[7]);  // Trích xuất quốc gia (trường thứ 7)
+            context.write(country, one);  // Phát ra (quốc gia, 1)
         }
     }
+}
 
-    // Reducer: nhận các cặp key-value từ mapper
-    public static class AvgConsumptionReducer extends Reducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
-        private DoubleWritable result = new DoubleWritable();
-
-        @Override
-        public void reduce(IntWritable key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
-            double sum = 0;
-            int count = 0;
-
-            // Tính tổng mức tiêu thụ trung bình từ các mapper
-            for (DoubleWritable val : values) {
-                sum += val.get();
-                count++;
-            }
-
-            // Tính mức tiêu thụ trung bình hàng năm
-            double average = sum / count;
-
-            // Chỉ xuất ra nếu mức tiêu thụ trung bình > 30
-            if (average > 30) {
-                result.set(average);
-                context.write(key, result); // Xuất (năm, mức tiêu thụ trung bình)
-            }
+// Reducer class: Tổng hợp số lượng bán hàng cho mỗi quốc gia
+public class SalesReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+        int sum = 0;
+        for (IntWritable val : values) {
+            sum += val.get();  // Tính tổng số lượng giao dịch
         }
+        context.write(key, new IntWritable(sum));  // Phát ra (quốc gia, tổng giao dịch)
     }
+}
 
-    // Main: cấu hình và chạy công việc MapReduce
+// Driver class: Cấu hình và chạy công việc MapReduce
+public class SalesDriver {
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        GenericOptionsParser optionParser = new GenericOptionsParser(conf, args);
-        String[] remainingArgs = optionParser.getRemainingArgs();
+        Job job = Job.getInstance(conf, "Sales Count by Country");
 
-        if (remainingArgs.length != 2) {
-            System.err.println("Usage: ElectricityConsumption <in> <out>");
-            System.exit(2);
-        }
+        job.setJarByClass(SalesDriver.class);
+        job.setMapperClass(SalesMapper.class);
+        job.setCombinerClass(SalesReducer.class);  // Sử dụng combiner để tối ưu
+        job.setReducerClass(SalesReducer.class);
 
-        Job job = Job.getInstance(conf, "Electricity Consumption");
-        job.setJarByClass(ElectricityConsumption.class);
-        job.setMapperClass(ConsumptionMapper.class);
-        job.setReducerClass(AvgConsumptionReducer.class);
-        job.setOutputKeyClass(IntWritable.class);
-        job.setOutputValueClass(DoubleWritable.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
 
-        FileInputFormat.addInputPath(job, new Path(remainingArgs[0])); // Đường dẫn vào
-        FileOutputFormat.setOutputPath(job, new Path(remainingArgs[1])); // Đường dẫn ra
+        // Đường dẫn đầu vào và đầu ra từ tham số dòng lệnh
+        FileInputFormat.addInputPath(job, new Path(args[0]));  // Tệp CSV đầu vào
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));  // Thư mục đầu ra
 
+        // Kết thúc và chạy công việc
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }
