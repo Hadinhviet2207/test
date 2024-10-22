@@ -36,9 +36,11 @@ public class ElectricityConsumption {
                     // Tính tổng mức tiêu thụ điện cho cả năm
                     while (tokenizer.hasMoreTokens()) {
                         String monthConsumptionStr = tokenizer.nextToken().trim();
-                        double monthConsumption = monthConsumptionStr.equals("00") ? 0.0 : Double.parseDouble(monthConsumptionStr);
-                        totalConsumption += monthConsumption;
-                        count++;
+                        if (!monthConsumptionStr.isEmpty()) { // Kiểm tra chuỗi không rỗng
+                            double monthConsumption = monthConsumptionStr.equals("00") ? 0.0 : Double.parseDouble(monthConsumptionStr);
+                            totalConsumption += monthConsumption;
+                            count++;
+                        }
                     }
 
                     // Chỉ ghi ra nếu có đủ 12 tháng
