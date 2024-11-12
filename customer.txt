@@ -1,18 +1,172 @@
-SELECT s.customer_id, SUM(s.quantity * p.price) AS total_spent
-FROM sales_2121050974 s
-JOIN products_2121050974 p ON s.product_id = p.product_id
-GROUP BY s.customer_id
-ORDER BY total_spent DESC
+ Tạo bảng Hive
+sql
+Copy code
+CREATE TABLE olympics_medals (
+    country STRING,
+    country_code STRING,
+    region STRING,
+    gold INT,
+    silver INT,
+    bronze INT,
+    total INT,
+    gdp DOUBLE,
+    gdp_year INT,
+    population BIGINT
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '\t'
+STORED AS TEXTFILE;
+2. Tính tổng số huy chương của mỗi khu vực
+sql
+Copy code
+SELECT region, 
+       SUM(gold) AS total_gold, 
+       SUM(silver) AS total_silver, 
+       SUM(bronze) AS total_bronze, 
+       SUM(total) AS total_medals
+FROM olympics_medals
+GROUP BY region
+ORDER BY total_medals DESC;
+3. Lấy danh sách các quốc gia có tổng số huy chương lớn hơn 50 và GDP lớn hơn 1 nghìn tỷ USD
+sql
+Copy code
+SELECT country, total, gdp
+FROM olympics_medals
+WHERE total > 50 AND gdp > 1000000000000
+ORDER BY total DESC;
+4. Tính số huy chương trung bình theo GDP trên đầu người của từng quốc gia
+sql
+Copy code
+SELECT country, 
+       ROUND(gdp / population, 2) AS gdp_per_capita, 
+       ROUND(total / population, 5) AS medals_per_person
+FROM olympics_medals
+ORDER BY medals_per_person DESC;
+5. Tìm quốc gia có tỷ lệ số huy chương trên GDP cao nhất
+sql
+Copy code
+SELECT country, 
+       ROUND(total / gdp, 8) AS medals_per_gdp
+FROM olympics_medals
+ORDER BY medals_per_gdp DESC
 LIMIT 1;
-SELECT s.product_id, SUM(s.quantity) AS total_quantity
-FROM sales_2121050974 s
-GROUP BY s.product_id
-ORDER BY total_quantity DESC
-LIMIT 3;
-SELECT c.city, SUM(s.quantity * p.price) AS total_revenue
-FROM sales_2121050974 s
-JOIN products_2121050974 p ON s.product_id = p.product_id
-JOIN customer_2121050974 c ON s.customer_id = c.customer_id
-GROUP BY c.city
-ORDER BY total_revenue DESC
-LIMIT 1;
+6. Xếp hạng các quốc gia theo tổng số huy chương và hiển thị vùng của chúng
+sql
+Copy code
+SELECT country, region, total,
+       RANK() OVER (ORDER BY total DESC) AS rank
+FROM olympics_medals;
+7. Tổng số huy chương và GDP trung bình của các quốc gia có dân số trên 50 triệu
+sql
+Copy code
+SELECT region, 
+       COUNT(country) AS num_countries, 
+       SUM(total) AS total_medals, 
+       AVG(gdp) AS avg_gdp
+FROM olympics_medals
+WHERE population > 50000000
+GROUP BY region;
+8. Phân tích sự tương quan giữa tổng số huy chương và GDP
+sql
+Copy code
+SELECT gdp, total
+FROM olympics_medals
+ORDER BY gdp DESC;
+Những truy vấn này giúp bạn phân tích nhiều góc độ về mối quan hệ giữa số lượng huy chương và trạng thái kinh tế của các quốc gia trong bộ dữ liệu của bạn.
+
+
+
+
+
+
+You said:
+những câu lệnh phức tạp có ý nghĩa cao 
+ChatGPT said:
+ChatGPT
+Dưới đây là các câu lệnh Hive phức tạp và có ý nghĩa cao để phân tích mối quan hệ giữa huy chương, GDP, và các yếu tố khác trong bộ dữ liệu của bạn:
+
+1. Tính hệ số huy chương trên GDP bình quân đầu người và xếp hạng quốc gia theo hệ số này
+Câu lệnh này tính hệ số huy chương trên GDP bình quân đầu người (medals per GDP per capita) để xác định những quốc gia nào đạt được nhiều huy chương so với sức mạnh kinh tế của họ.
+sql
+Copy code
+SELECT country, 
+       ROUND(total / (gdp / population), 4) AS medals_per_gdp_per_capita,
+       RANK() OVER (ORDER BY total / (gdp / population) DESC) AS rank_by_efficiency
+FROM olympics_medals
+WHERE gdp > 0 AND population > 0
+ORDER BY medals_per_gdp_per_capita DESC;
+2. Phân loại quốc gia theo thu nhập và tính tổng huy chương cho từng loại
+Câu lệnh này phân loại các quốc gia dựa trên mức GDP bình quân đầu người (thu nhập thấp, trung bình, và cao) và tính tổng số huy chương cho từng loại thu nhập, giúp hiểu rõ mối quan hệ giữa mức thu nhập và thành tích Olympic.
+sql
+Copy code
+SELECT CASE 
+          WHEN (gdp / population) < 10000 THEN 'Low Income'
+          WHEN (gdp / population) BETWEEN 10000 AND 30000 THEN 'Middle Income'
+          ELSE 'High Income'
+       END AS income_level,
+       COUNT(country) AS num_countries,
+       SUM(total) AS total_medals,
+       AVG(total) AS avg_medals_per_country
+FROM olympics_medals
+WHERE population > 0
+GROUP BY CASE 
+            WHEN (gdp / population) < 10000 THEN 'Low Income'
+            WHEN (gdp / population) BETWEEN 10000 AND 30000 THEN 'Middle Income'
+            ELSE 'High Income'
+         END
+ORDER BY total_medals DESC;
+3. Phân tích tương quan giữa GDP và tổng số huy chương với tính toán hệ số tương quan
+Sử dụng SQL để tính các giá trị cần thiết cho hệ số tương quan giữa GDP và tổng huy chương. Câu lệnh giúp nhận diện xem có mối liên hệ tuyến tính giữa GDP và thành tích thể thao hay không.
+sql
+Copy code
+WITH stats AS (
+    SELECT COUNT(*) AS n,
+           SUM(gdp) AS sum_gdp,
+           SUM(total) AS sum_medals,
+           SUM(gdp * gdp) AS sum_gdp_sq,
+           SUM(total * total) AS sum_medals_sq,
+           SUM(gdp * total) AS sum_gdp_medals
+    FROM olympics_medals
+    WHERE gdp > 0 AND total > 0
+)
+SELECT (n * sum_gdp_medals - sum_gdp * sum_medals) / 
+       (SQRT(n * sum_gdp_sq - sum_gdp * sum_gdp) * SQRT(n * sum_medals_sq - sum_medals * sum_medals)) AS correlation
+FROM stats;
+4. Xác định các quốc gia có thành tích vượt trội dựa trên tỷ lệ huy chương trên GDP và tổng số huy chương
+Tìm các quốc gia có tỷ lệ huy chương trên GDP và tổng số huy chương cao hơn mức trung bình để xác định những quốc gia vượt trội so với mức trung bình toàn cầu.
+sql
+Copy code
+WITH avg_stats AS (
+    SELECT AVG(total / gdp) AS avg_medals_per_gdp,
+           AVG(total) AS avg_medals
+    FROM olympics_medals
+    WHERE gdp > 0
+)
+SELECT country, total, gdp, 
+       ROUND(total / gdp, 6) AS medals_per_gdp
+FROM olympics_medals, avg_stats
+WHERE total / gdp > avg_medals_per_gdp AND total > avg_medals
+ORDER BY medals_per_gdp DESC, total DESC;
+5. Phân tích số huy chương trung bình theo tỷ lệ dân số và xếp hạng theo hệ số
+Tính hệ số huy chương trên 1 triệu dân và xếp hạng các quốc gia dựa trên hệ số này để hiểu rõ hơn về mức độ thành công của các quốc gia nhỏ hơn.
+sql
+Copy code
+SELECT country, 
+       ROUND((total / population) * 1000000, 2) AS medals_per_million,
+       RANK() OVER (ORDER BY (total / population) DESC) AS rank_by_population
+FROM olympics_medals
+WHERE population > 1000000
+ORDER BY medals_per_million DESC
+LIMIT 10;
+6. Xác định các khu vực có tỷ lệ GDP cao nhưng số huy chương trung bình thấp
+Xác định các khu vực có GDP trung bình cao nhưng không có nhiều huy chương để tìm hiểu sự bất cân xứng giữa sức mạnh kinh tế và thành tích Olympic.
+sql
+Copy code
+SELECT region, 
+       AVG(gdp) AS avg_gdp, 
+       AVG(total) AS avg_medals
+FROM olympics_medals
+GROUP BY region
+HAVING avg_gdp > (SELECT AVG(gdp) FROM olympics_medals) 
+       AND avg_medals < (SELECT AVG(total) FROM olympics_medals)
+ORDER BY avg_gdp DESC;
