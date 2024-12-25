@@ -9,7 +9,7 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 # Bước 2: Đọc dữ liệu từ HDFS
-data = spark.read.csv("hdfs://<namenode_host>:8020/path/to/your/data.csv", header=True, inferSchema=True)
+data = spark.read.csv("hdfs://quickstart.cloudera:8020/BTL_DLL/df_train.csv", header=True, inferSchema=True)
 
 # Bước 3: Tiền xử lý dữ liệu
 # Chuyển cột chuỗi thành số (StringIndexer)
@@ -41,7 +41,7 @@ r2 = evaluator.evaluate(predictions)
 print(f"R2 của mô hình là: {r2}")
 
 # Bước 6: Lưu mô hình vào HDFS
-lr_model.save("hdfs://<namenode_host>:8020/path/to/save/lr_model")
+lr_model.save("hdfs://quickstart.cloudera:8020/BTL_DLL/lr_model")
 
 # Dừng Spark session
 spark.stop()
